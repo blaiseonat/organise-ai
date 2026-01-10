@@ -1,0 +1,288 @@
+import React, { useState } from 'react';
+import { base44 } from '@/api/base44Client';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Folder, Sparkles, Loader2, FolderTree, Copy, CheckCircle2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+export default function FileSortingPlanner() {
+  const [description, setDescription] = useState('');
+  const [plan, setPlan] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const generatePlan = async () => {
+    if (!description.trim()) {
+      toast.error('Please describe what\'s on your desktop first');
+      return;
+    }
+
+    setIsLoading(true);
+    setPlan(null);
+
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a professional file organization expert. Based on the following description of someone's desktop, create a comprehensive and practical organization plan.
+
+User's desktop description: "${description}"
+
+Create a detailed organization plan that includes:
+1. Main folders to create (with clear, descriptive names)
+2. What types of files go in each folder
+3. Any subfolders that would be helpful
+4. Quick tips for maintaining the organization
+
+Be specific, practical, and thorough. The goal is to make their desktop clean and easy to navigate.`,
+        response_json_schema: {
+          type: 'object',
+          properties: {
+            overview: {
+              type: 'string',
+              description: 'A brief overview of the organization strategy'
+            },
+            folders: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  file_types: {
+                    type: 'array',
+                    items: { type: 'string' }
+                  },
+                  subfolders: {
+                    type: 'array',
+                    items: { type: 'string' }
+                  }
+                }
+              }
+            },
+            maintenance_tips: {
+              type: 'array',
+              items: { type: 'string' }
+            }
+          }
+        }
+      });
+
+      setPlan(result);
+    } catch (error) {
+      toast.error('Failed to generate plan. Please try again.');
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const copyPlanToClipboard = () => {
+    let text = `📋 Desktop Organization Plan\n\n`;
+    text += `${plan.overview}\n\n`;
+    text += `📁 FOLDERS TO CREATE:\n\n`;
+    
+    plan.folders.forEach((folder, index) => {
+      text += `${index + 1}. ${folder.name}\n`;
+      text += `   ${folder.description}\n`;
+      if (folder.file_types && folder.file_types.length > 0) {
+        text += `   File types: ${folder.file_types.join(', ')}\n`;
+      }
+      if (folder.subfolders && folder.subfolders.length > 0) {
+        text += `   Subfolders: ${folder.subfolders.join(', ')}\n`;
+      }
+      text += `\n`;
+    });
+
+    text += `💡 MAINTENANCE TIPS:\n`;
+    plan.maintenance_tips.forEach((tip, index) => {
+      text += `${index + 1}. ${tip}\n`;
+    });
+
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    toast.success('Plan copied to clipboard!');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+      <div className="max-w-5xl mx-auto px-4 py-12">
+        {/* Header */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-2xl mb-4 shadow-lg">
+            <FolderTree className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-4xl font-bold text-slate-900 mb-3">
+            Desktop File Sorting Planner
+          </h1>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            Get AI-powered suggestions to organize your digital workspace
+          </p>
+        </div>
+
+        {/* Input Section */}
+        <Card className="mb-8 shadow-xl border-0 bg-white/80 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-2xl">
+              <Sparkles className="w-6 h-6 text-blue-600" />
+              Describe Your Desktop
+            </CardTitle>
+            <CardDescription className="text-base">
+              Tell us what files, folders, and items are currently on your desktop
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Textarea
+              placeholder="Example: I have lots of screenshots, work documents from the last 3 months, some PDFs I downloaded, family photos, a few zip files, and various shortcuts..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="min-h-32 text-base resize-none"
+              disabled={isLoading}
+            />
+            <Button
+              onClick={generatePlan}
+              disabled={isLoading || !description.trim()}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white h-12 text-base font-semibold shadow-lg"
+              size="lg"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Creating Your Organization Plan...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-5 h-5 mr-2" />
+                  Generate Organization Plan
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Results Section */}
+        {plan && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Overview */}
+            <Card className="shadow-xl border-0 bg-white/80 backdrop-blur">
+              <CardHeader className="border-b bg-gradient-to-r from-blue-50 to-slate-50">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-2xl">Your Organization Plan</CardTitle>
+                  <Button
+                    onClick={copyPlanToClipboard}
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                  >
+                    {copied ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        Copy Plan
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <p className="text-slate-700 text-base leading-relaxed">
+                  {plan.overview}
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Folders */}
+            <div className="space-y-4">
+              <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                <Folder className="w-6 h-6 text-blue-600" />
+                Folders to Create
+              </h2>
+              
+              <div className="grid gap-4 md:grid-cols-2">
+                {plan.folders.map((folder, index) => (
+                  <Card key={index} className="shadow-lg border-0 bg-white/80 backdrop-blur hover:shadow-xl transition-shadow">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                          <Folder className="w-5 h-5 text-blue-600" />
+                        </div>
+                        {folder.name}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-slate-600 text-sm leading-relaxed">
+                        {folder.description}
+                      </p>
+                      
+                      {folder.file_types && folder.file_types.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 mb-2">FILE TYPES:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {folder.file_types.map((type, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-1 bg-slate-100 text-slate-700 rounded text-xs font-medium"
+                              >
+                                {type}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {folder.subfolders && folder.subfolders.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 mb-2">SUBFOLDERS:</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {folder.subfolders.map((subfolder, i) => (
+                              <span
+                                key={i}
+                                className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium"
+                              >
+                                {subfolder}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+
+            {/* Maintenance Tips */}
+            {plan.maintenance_tips && plan.maintenance_tips.length > 0 && (
+              <Card className="shadow-xl border-0 bg-gradient-to-br from-blue-50 to-slate-50">
+                <CardHeader>
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-blue-600" />
+                    Tips to Stay Organized
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3">
+                    {plan.maintenance_tips.map((tip, index) => (
+                      <li key={index} className="flex gap-3">
+                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-semibold">
+                          {index + 1}
+                        </span>
+                        <span className="text-slate-700 leading-relaxed pt-0.5">
+                          {tip}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
